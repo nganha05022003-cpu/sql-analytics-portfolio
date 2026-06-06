@@ -1,0 +1,8 @@
+sql-analytics-portfolio/
+├── module-1-funnel-dropoff/
+│   ├── schema.md
+│   ├── queries/
+│   └── findings.md
+├── module-2-seller-segmentation/
+├── module-3-returns-analysis/
+└── module-4-campaign-roi/
