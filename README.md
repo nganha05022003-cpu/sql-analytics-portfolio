@@ -167,5 +167,3 @@ This order explains why GROUP BY can't use SELECT aliases — aliases don't exis
 **The finding:** Drop-off is concentrated, not systemic. São Paulo sellers account for 73% of stuck shipments, with health/beauty and bed/bath as the top affected categories. That's a targeted ops problem, not a platform-wide logistics failure.
 
 ---
-
-Module 1 is complete. When you're ready, Module 2 is Seller Performance Segmentation — where you'll learn window functions: RANK, NTILE, and cumulative SUM. That's the jump from intermediate to advanced SQL.
