@@ -174,7 +174,7 @@ and flag high-GMV/low-rating sellers as an operational risk segment.
 
 **Output:** Pareto analysis, 5x5 risk matrix, high-risk seller list with GMV share.
 ### Key SQL Patterns Learned
-**Multi-table LEFT JOIN chain**
+**1. Multi-table LEFT JOIN chain**
 Always use LEFT JOIN from the primary entity outward to preserve sellers with
 zero orders. INNER JOIN would silently drop them.
 ```sql
@@ -184,7 +184,7 @@ LEFT JOIN orders      ON order_items.order_id = orders.order_id
 LEFT JOIN order_reviews ON orders.order_id = order_reviews.order_id
 ```
 
-**NTILE vs CASE WHEN for bucketing**
+**2. NTILE vs CASE WHEN for bucketing**
 NTILE divides by row count — correct for GMV (relative ranking matters).
 CASE WHEN divides by value thresholds — correct for review scores (absolute
 values are meaningful). Always check bucket ranges with MIN/MAX before using
@@ -203,7 +203,7 @@ CASE
 END AS review_score_tier
 ```
 
-**Cumulative SUM window frame**
+**3. Cumulative SUM window frame**
 The ROWS BETWEEN clause controls which rows are included in the running total.
 UNBOUNDED PRECEDING means "from the very first row down to here."
 ```sql
@@ -213,19 +213,19 @@ SUM(gmv) OVER (
 ) AS cumulative_gmv
 ```
 
-**Global SUM with empty OVER()**
+**4. Global SUM with empty OVER()**
 An empty OVER() applies the aggregate across all rows with no partitioning.
 Used to get total platform GMV for percentage calculations.
 ```sql
 SUM(gmv) OVER () AS total_platform_gmv
 ```
 
-**Why aggregate calculations belong outside row-level CTEs**
+**5. Why aggregate calculations belong outside row-level CTEs**
 CTEs like seller_quintiles are row-level — one row per seller. Placing COUNT
 or SUM inside them without GROUP BY collapses all rows into one number.
 Aggregations that summarize the data go in the final SELECT with GROUP BY.
 
-**CTE chaining for layered logic**
+**6. CTE chaining for layered logic**
 Each CTE builds on the previous one, keeping logic separated and readable:
 WITH seller_metrics AS (
     -- base metrics per seller
@@ -240,7 +240,7 @@ pareto_calc AS (
     FROM seller_quintiles
 )
 SELECT * FROM pareto_calc;
-**CASE WHEN waterfall pattern**
+**7. CASE WHEN waterfall pattern**
 When conditions are ordered and mutually exclusive, each WHEN only needs
 one comparison — prior conditions already eliminated higher values.
 ```sql
@@ -252,7 +252,7 @@ CASE
     ELSE 5
 END
 ```
-**Window functions — RANK, DENSE_RANK, ROW_NUMBER**
+**8. Window functions — RANK, DENSE_RANK, ROW_NUMBER**
 What they do: Assign rank numbers to rows based on a sort order without collapsing rows like GROUP BY does.
 sqlRANK() OVER (ORDER BY gmv DESC)        -- ties share rank, next rank skips
 DENSE_RANK() OVER (ORDER BY gmv DESC)  -- ties share rank, no skipping
