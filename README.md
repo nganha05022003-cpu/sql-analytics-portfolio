@@ -252,7 +252,7 @@ CASE
     ELSE 5
 END
 ```
-**8. Window functions — RANK, DENSE_RANK, ROW_NUMBER**
+**7. Window functions — RANK, DENSE_RANK, ROW_NUMBER**
 What they do: Assign rank numbers to rows based on a sort order without collapsing rows like GROUP BY does.
 sqlRANK() OVER (ORDER BY gmv DESC)        -- ties share rank, next rank skips
 DENSE_RANK() OVER (ORDER BY gmv DESC)  -- ties share rank, no skipping
@@ -268,3 +268,16 @@ Revenue concentration is not just a statistical curiosity — it defines where
 operational risk is asymmetric. When 17.5% of sellers control 80% of GMV,
 the platform cannot treat all seller quality failures equally. The correct
 response is a tiered intervention framework, not a blanket policy.
+## The Analytical Story of Module 2
+
+| Query | Question answered |
+|-------|-------------------|
+| `LEFT JOIN` × 3 + `GROUP BY seller_id` | What is each seller's total GMV, order count, avg rating, and avg fulfillment days? |
+| `NTILE(5) OVER (ORDER BY gmv DESC)` | Which quintile does each seller fall into by revenue? |
+| `CASE WHEN avg_review_score >= 4.5 THEN 1 ...` | What is each seller's rating tier using business-defined thresholds (not row count)? |
+| `SUM(gmv) OVER (ORDER BY gmv DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` | What is the running cumulative GMV as we add sellers from highest to lowest? |
+| `cumulative_gmv / SUM(gmv) OVER ()` | What share of total platform GMV does each seller represent cumulatively? |
+| `CASE WHEN cumulative_share <= 0.80 THEN 'pareto'` | Which sellers make up the 80% GMV threshold (Pareto group)? |
+| `GROUP BY gmv_quintile, review_score_tier` | How many sellers sit at each intersection of GMV tier and rating tier? |
+| `WHERE gmv_quintile = 1 AND review_score_tier IN (4, 5)` | Which high-revenue sellers have dangerously low ratings? |
+| `SUM(gmv) / platform_gmv` | What share of total GMV is controlled by the high-risk segment? |
