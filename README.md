@@ -167,3 +167,104 @@ This order explains why GROUP BY can't use SELECT aliases — aliases don't exis
 **The finding:** Drop-off is concentrated, not systemic. São Paulo sellers account for 73% of stuck shipments, with health/beauty and bed/bath as the top affected categories. That's a targeted ops problem, not a platform-wide logistics failure.
 
 ---
+###  Module 2: Seller Performance Segmentation
+
+**Goal:** Rank sellers by GMV, identify the top 20% driving 80% of revenue,
+and flag high-GMV/low-rating sellers as an operational risk segment.
+
+**Output:** Pareto analysis, 5x5 risk matrix, high-risk seller list with GMV share.
+### Key SQL Patterns Learned
+**Multi-table LEFT JOIN chain**
+Always use LEFT JOIN from the primary entity outward to preserve sellers with
+zero orders. INNER JOIN would silently drop them.
+```sql
+FROM sellers
+LEFT JOIN order_items ON sellers.seller_id = order_items.seller_id
+LEFT JOIN orders      ON order_items.order_id = orders.order_id
+LEFT JOIN order_reviews ON orders.order_id = order_reviews.order_id
+```
+
+**NTILE vs CASE WHEN for bucketing**
+NTILE divides by row count — correct for GMV (relative ranking matters).
+CASE WHEN divides by value thresholds — correct for review scores (absolute
+values are meaningful). Always check bucket ranges with MIN/MAX before using
+NTILE on skewed distributions.
+```sql
+-- Wrong for review scores (skewed distribution):
+NTILE(5) OVER (ORDER BY avg_review_score DESC)
+
+-- Right for review scores (business-defined thresholds):
+CASE
+    WHEN avg_review_score >= 4.5 THEN 1
+    WHEN avg_review_score >= 4.0 THEN 2
+    WHEN avg_review_score >= 3.5 THEN 3
+    WHEN avg_review_score >= 3.0 THEN 4
+    ELSE 5
+END AS review_score_tier
+```
+
+**Cumulative SUM window frame**
+The ROWS BETWEEN clause controls which rows are included in the running total.
+UNBOUNDED PRECEDING means "from the very first row down to here."
+```sql
+SUM(gmv) OVER (
+    ORDER BY gmv DESC
+    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+) AS cumulative_gmv
+```
+
+**Global SUM with empty OVER()**
+An empty OVER() applies the aggregate across all rows with no partitioning.
+Used to get total platform GMV for percentage calculations.
+```sql
+SUM(gmv) OVER () AS total_platform_gmv
+```
+
+**Why aggregate calculations belong outside row-level CTEs**
+CTEs like seller_quintiles are row-level — one row per seller. Placing COUNT
+or SUM inside them without GROUP BY collapses all rows into one number.
+Aggregations that summarize the data go in the final SELECT with GROUP BY.
+
+**CTE chaining for layered logic**
+Each CTE builds on the previous one, keeping logic separated and readable:
+WITH seller_metrics AS (
+    -- base metrics per seller
+),
+seller_quintiles AS (
+    SELECT *, NTILE(5) OVER (ORDER BY gmv DESC) AS gmv_quintile
+    FROM seller_metrics
+),
+pareto_calc AS (
+    SELECT *, SUM(gmv) OVER (ORDER BY gmv DESC 
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_gmv
+    FROM seller_quintiles
+)
+SELECT * FROM pareto_calc;
+**CASE WHEN waterfall pattern**
+When conditions are ordered and mutually exclusive, each WHEN only needs
+one comparison — prior conditions already eliminated higher values.
+```sql
+CASE
+    WHEN score >= 4.5 THEN 1   -- only reaches here if score < 4.5
+    WHEN score >= 4.0 THEN 2   -- only reaches here if score < 4.0
+    WHEN score >= 3.5 THEN 3
+    WHEN score >= 3.0 THEN 4
+    ELSE 5
+END
+```
+**Window functions — RANK, DENSE_RANK, ROW_NUMBER**
+What they do: Assign rank numbers to rows based on a sort order without collapsing rows like GROUP BY does.
+sqlRANK() OVER (ORDER BY gmv DESC)        -- ties share rank, next rank skips
+DENSE_RANK() OVER (ORDER BY gmv DESC)  -- ties share rank, no skipping
+ROW_NUMBER() OVER (ORDER BY gmv DESC)  -- every row gets unique number
+When to use which:
+
+RANK → when gaps matter (official leaderboards)
+DENSE_RANK → when you want clean sequential tiers despite ties
+ROW_NUMBER → when you need a unique ID for every row regardless of ties
+### Key PM Insight from This Module
+
+Revenue concentration is not just a statistical curiosity — it defines where
+operational risk is asymmetric. When 17.5% of sellers control 80% of GMV,
+the platform cannot treat all seller quality failures equally. The correct
+response is a tiered intervention framework, not a blanket policy.
